@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guard — Camera access monitor for macOS</title>
+  <meta name="description" content="Guard monitors your camera and blocks access until you approve. Open source. Runs locally. No data leaves your Mac.">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f8f7f5;
+      --text: #141318;
+      --text-secondary: #5a5860;
+      --text-tertiary: #9e9ba0;
+      --border: #e6e4ec;
+      --accent: #1b4965;
+      --accent-light: #5fa8d3;
+      --dark-bg: #111118;
+      --dark-text: #e8e6f0;
+      --dark-secondary: #9896a3;
+      --radius: 8px;
+      --max-w: 1080px;
+      --font: 'DM Sans', system-ui, -apple-system, sans-serif;
+      --mono: 'DM Mono', 'SF Mono', Menlo, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ─────────────────────────────── */
+
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 clamp(20px, 4vw, 48px);
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .nav-brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+    }
+
+    .nav-brand span {
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 400;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-gh {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      text-decoration: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .nav-gh:hover { background: var(--bg-subtle); border-color: #ccc; }
+
+    .nav-gh svg { width: 16px; height: 16px; }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      background: var(--text);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font);
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn-primary:hover { opacity: 0.85; }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 0;
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 400;
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .btn-secondary:hover { color: var(--text); border-color: var(--text); }
+
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .hamburger svg { width: 24px; height: 24px; color: var(--text); }
+
+    /* ── HERO ────────────────────────────── */
+
+    .hero {
+      padding: 160px clamp(20px, 4vw, 48px) 80px;
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 14px;
+      border: 1px solid #c3e6d1;
+      border-radius: 99px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: #1d7a4a;
+      margin-bottom: 28px;
+      font-weight: 400;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: #1d7a4a;
+      border-radius: 50%;
+    }
+
+    .hero h1 {
+      font-size: clamp(42px, 6vw, 68px);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      font-weight: 300;
+      color: var(--text-secondary);
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 19px);
+      color: var(--text-secondary);
+      max-width: 520px;
+      line-height: 1.65;
+      margin-bottom: 36px;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-bottom: 48px;
+    }
+
+    .hero-meta {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      display: flex;
+      gap: 20px;
+    }
+
+    .hero-meta span { display: inline-flex; align-items: center; gap: 5px; }
+
+    /* ── APP VISUAL ──────────────────────── */
+
+    .app-visual {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .mock-window {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+      max-width: 420px;
+      flex: 1;
+      transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .mock-window:hover { transform: translateY(-4px); }
+
+    .mock-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 14px 16px;
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mock-dot {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+    }
+
+    .mock-dot.red { background: #ff5f57; }
+    .mock-dot.yellow { background: #febc2e; }
+    .mock-dot.green { background: #28c840; }
+
+    .mock-body { padding: 24px; }
+
+    .mock-alert-icon {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .mock-alert-icon svg { width: 26px; height: 26px; color: #fff; }
+
+    .mock-body h3 {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    .mock-body p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      margin-bottom: 20px;
+    }
+
+    .mock-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mock-btn {
+      flex: 1;
+      padding: 8px 0;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .mock-btn.allow { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .mock-btn.block { background: #d63031; color: #fff; border-color: #d63031; }
+
+    /* ── STATS ────────────────────────────── */
+
+    .stats {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .stat {
+      padding: 32px 24px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+    }
+
+    .stat:last-child { border-right: none; }
+
+    .stat-value {
+      font-size: clamp(28px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── FEATURES ─────────────────────────── */
+
+    .features {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin-bottom: 12px;
+    }
+
+    .section-heading {
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .section-sub {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin-bottom: 48px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .feature-card {
+      padding: 32px 28px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.25s;
+    }
+
+    .feature-card:hover { background: var(--bg-subtle); }
+
+    .feature-card:nth-child(3n) { border-right: none; }
+    .feature-card:nth-child(n+4) { border-bottom: none; }
+
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 16px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-subtle);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ── HOW IT WORKS ─────────────────────── */
+
+    .how-it-works {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      margin-top: 48px;
+    }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .step-num::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .step h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .step p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    /* ── QUOTE ────────────────────────────── */
+
+    .quote-section {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      max-width: var(--max-w);
+      margin: 0 auto 80px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .divider-inner { height: 1px; background: var(--border); }
+
+    blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 28px;
+      font-size: clamp(18px, 2.5vw, 22px);
+      font-weight: 400;
+      line-height: 1.6;
+      color: var(--text);
+      font-style: italic;
+      max-width: 680px;
+    }
+
+    blockquote cite {
+      display: block;
+      margin-top: 16px;
+      font-size: 14px;
+      font-style: normal;
+      font-weight: 400;
+      color: var(--text-tertiary);
+    }
+
+    /* ── INSTALL ──────────────────────────── */
+
+    .install {
+      max-width: var(--max-w);
+      margin: 0 auto 100px;
+      padding: 0 clamp(20px, 4vw, 48px);
+    }
+
+    .install-card {
+      background: var(--dark-bg);
+      border-radius: 16px;
+      padding: clamp(40px, 5vw, 64px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    .install-card h2 {
+      font-size: clamp(26px, 3.5vw, 34px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .install-card .section-sub {
+      color: var(--dark-secondary);
+    }
+
+    .install-method {
+      margin-top: 24px;
+    }
+
+    .install-method-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--dark-secondary);
+      margin-bottom: 12px;
+    }
+
+    .install-method .btn-primary {
+      background: #fff;
+      color: var(--dark-bg);
+    }
+
+    .install-method .btn-primary:hover { opacity: 0.9; }
+
+    .code-block {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--dark-text);
+      position: relative;
+      overflow-x: auto;
+    }
+
+    .code-block code { white-space: pre; }
+
+    .code-block .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dark-secondary);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .code-block .copy-btn:hover { background: rgba(255,255,255,0.14); }
+
+    .install-right .install-method-label { margin-top: 0; }
+
+    .install-steps {
+      color: var(--dark-secondary);
+      font-size: 14px;
+      line-height: 1.8;
+      margin-top: 16px;
+    }
+
+    .install-steps code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: rgba(255,255,255,0.06);
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: var(--dark-text);
+    }
+
+    /* ── FOOTER ───────────────────────────── */
+
+    footer {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 clamp(20px, 4vw, 48px) 60px;
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 40px;
+    }
+
+    .footer-brand {
+      max-width: 280px;
+    }
+
+    .footer-brand .nav-brand {
+      margin-bottom: 10px;
+    }
+
+    .footer-brand p {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      line-height: 1.6;
+    }
+
+    .footer-col h4 {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin-bottom: 14px;
+    }
+
+    .footer-col a {
+      display: block;
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      margin-bottom: 10px;
+      transition: color 0.2s;
+    }
+
+    .footer-col a:hover { color: var(--text); }
+
+    /* ── ANIMATIONS ──────────────────────── */
+
+    .fade-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s cubic-bezier(0.2, 0, 0, 1),
+                  transform 0.7s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── RESPONSIVE ──────────────────────── */
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .hamburger { display: block; }
+
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 64px; left: 0; right: 0;
+        background: rgba(255,255,255,0.96);
+        backdrop-filter: blur(16px);
+        padding: 20px;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .hero h1 { font-size: 36px; }
+
+      .hero-actions {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .hero-meta { flex-direction: column; gap: 6px; }
+
+      .app-visual {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .mock-window { max-width: 100%; }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .stat:nth-child(2) { border-right: none; }
+      .stat:nth-child(1), .stat:nth-child(2) { border-bottom: 1px solid var(--border); }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-card { border-right: none !important; border-bottom: 1px solid var(--border) !important; }
+      .feature-card:last-child { border-bottom: none !important; }
+
+      .steps { grid-template-columns: 1fr; gap: 28px; }
+
+      .install-card { grid-template-columns: 1fr; }
+      .install-right { margin-top: 0; }
+
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ NAV ═══ -->
+  <nav>
+    <a href="#" class="nav-brand">
+      <img src="icon.png" alt="Guard">
+      <span>Guard</span>
+    </a>
+    <button class="hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/FaisalFehad/Guard" class="nav-gh">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+      <a href="#install" class="btn-primary">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <div class="fade-up" style="transition-delay: 0ms">
+      <div class="hero-badge">v1.0 — Initial Release</div>
+    </div>
+    <h1 class="fade-up" style="transition-delay: 80ms">
+      Know who's watching.<br><em>Before they do.</em>
+    </h1>
+    <p class="hero-sub fade-up" style="transition-delay: 160ms">
+      Guard monitors your Mac's camera and freezes any process that tries to access it — until you explicitly approve. Open source. Fully local. No data leaves your machine.
+    </p>
+    <div class="hero-actions fade-up" style="transition-delay: 240ms">
+      <a href="#install" class="btn-primary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download for macOS
+      </a>
+      <a href="https://github.com/FaisalFehad/Guard" class="btn-secondary">
+        View on GitHub
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+    <div class="hero-meta fade-up" style="transition-delay: 320ms">
+      <span>macOS 14+</span>
+      <span>Apple Silicon & Intel</span>
+      <span>~250 KB</span>
+      <span>MIT License</span>
+    </div>
+  </section>
+
+  <!-- ═══ APP MOCKUPS ═══ -->
+  <div class="app-visual">
+    <div class="mock-window fade-up" style="transition-delay: 100ms">
+      <div class="mock-titlebar">
+        <div class="mock-dot red"></div>
+        <div class="mock-dot yellow"></div>
+        <div class="mock-dot green"></div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-alert-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="13" r="3"/><path d="M2 13s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/></svg>
+        </div>
+        <h3>Camera Access Blocked</h3>
+        <p>"zoom.us" (PID: 4821) wants to use your camera.<br>The process is suspended until you decide.</p>
+        <div class="mock-buttons">
+          <div class="mock-btn allow">Allow</div>
+          <div class="mock-btn block">Block</div>
+        </div>
+      </div>
+    </div>
+    <div class="mock-window fade-up" style="transition-delay: 200ms">
+      <div class="mock-titlebar">
+        <div class="mock-dot red"></div>
+        <div class="mock-dot yellow"></div>
+        <div class="mock-dot green"></div>
+      </div>
+      <div class="mock-body">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+          <div style="width:10px;height:10px;background:#d63031;border-radius:50%;animation:pulse 1.2s infinite;"></div>
+          <span style="font-size:14px;font-weight:500;">Camera: Active (FaceTime)</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-tertiary);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Recent activity</div>
+        <div style="font-size:13px;line-height:2.1;">
+          <div><span style="color:var(--text-tertiary);font-family:var(--mono);font-size:12px;">18:04:12</span>&nbsp; FaceTime — <span style="color:#1d7a4a">Allowed</span></div>
+          <div><span style="color:var(--text-tertiary);font-family:var(--mono);font-size:12px;">17:58:41</span>&nbsp; Chrome — <span style="color:#d63031">Blocked</span></div>
+          <div><span style="color:var(--text-tertiary);font-family:var(--mono);font-size:12px;">17:32:09</span>&nbsp; Discord — <span style="color:#e67e22">Auto-blocked</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+
+  <!-- ═══ STATS ═══ -->
+  <div class="stats fade-up">
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-value" data-target="500">~500</div>
+        <div class="stat-label">ms detection</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">0</div>
+        <div class="stat-label">data collected</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">local processing</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">~250</div>
+        <div class="stat-label">KB binary size</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FEATURES ═══ -->
+  <section class="features fade-up" id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-heading">Built for privacy, not paranoia.</h2>
+    <p class="section-sub">Guard sits quietly in your menu bar until something tries to access your camera. Then it acts — instantly.</p>
+    <div class="features-grid">
+      <div class="feature-card fade-up" style="transition-delay: 0ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="6" width="16" height="12" rx="2"/><path d="M22 8l-4 3v2l4 3V8z"/></svg>
+        </div>
+        <h3>Block-first architecture</h3>
+        <p>Processes are frozen with SIGSTOP the instant they touch the camera. Nothing gets through until you say so.</p>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay: 80ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <h3>Real-time monitoring</h3>
+        <p>CoreMediaIO polling at 500ms intervals. Camera access is detected before the process can read a single frame.</p>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay: 160ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Permanent block list</h3>
+        <p>Apps you don't trust get auto-blocked on every future attempt. No prompts, no interruptions — just silent protection.</p>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay: 240ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        </div>
+        <h3>Full activity log</h3>
+        <p>Every camera access attempt is recorded — process name, PID, bundle ID, timestamp, and whether it was allowed or blocked.</p>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay: 320ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <h3>Fully local</h3>
+        <p>No network calls, no telemetry, no accounts. Guard runs entirely on your Mac. Your data never leaves your machine.</p>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay: 400ms">
+        <div class="feature-icon">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
+        </div>
+        <h3>Open source</h3>
+        <p>Every line of code is auditable. No trust required — read it, build it, verify it yourself. MIT licensed.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ DIVIDER ═══ -->
+  <div class="divider"><div class="divider-inner"></div></div>
+
+  <!-- ═══ HOW IT WORKS ═══ -->
+  <section class="how-it-works fade-up" id="how-it-works">
+    <div class="section-label">How it works</div>
+    <h2 class="section-heading">Three steps. Zero trust.</h2>
+    <p class="section-sub">Guard uses macOS CoreMediaIO APIs to detect camera hardware activation, then freezes the responsible process before it can read any frames.</p>
+    <div class="steps">
+      <div class="step fade-up" style="transition-delay: 0ms">
+        <div class="step-num">01</div>
+        <h3>Detect</h3>
+        <p>Guard polls CoreMediaIO's <code>kCMIODevicePropertyDeviceIsRunningSomewhere</code> every 500ms. The moment any process activates the camera hardware, Guard knows.</p>
+      </div>
+      <div class="step fade-up" style="transition-delay: 100ms">
+        <div class="step-num">02</div>
+        <h3>Freeze</h3>
+        <p>The offending process is immediately sent SIGSTOP — a kernel-level signal that cannot be caught or ignored. The process is completely suspended. No frames are read.</p>
+      </div>
+      <div class="step fade-up" style="transition-delay: 200ms">
+        <div class="step-num">03</div>
+        <h3>Decide</h3>
+        <p>A modal alert shows you exactly which process tried to access your camera. Choose Allow (SIGCONT resumes it), Block (SIGTERM kills it), or Always Block (adds to permanent list).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ DIVIDER ═══ -->
+  <div class="divider"><div class="divider-inner"></div></div>
+
+  <!-- ═══ QUOTE ═══ -->
+  <section class="quote-section fade-up">
+    <blockquote>
+      I always wondered which apps were secretly using my camera. Now I don't have to wonder — I just get asked.
+      <cite>— The reason Guard exists</cite>
+    </blockquote>
+  </section>
+
+  <!-- ═══ DIVIDER ═══ -->
+  <div class="divider"><div class="divider-inner"></div></div>
+
+  <!-- ═══ INSTALL ═══ -->
+  <section class="install fade-up" id="install">
+    <div class="install-card">
+      <div class="install-left">
+        <h2>Get started in<br>30 seconds.</h2>
+        <p class="section-sub">Download the pre-built app or build from source. No dependencies, no frameworks, no Xcode required.</p>
+        <div class="install-method">
+          <div class="install-method-label">Recommended</div>
+          <a href="https://github.com/FaisalFehad/Guard/releases" class="btn-primary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download DMG
+          </a>
+        </div>
+      </div>
+      <div class="install-right">
+        <div class="install-method-label">Build from source</div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <code>git clone https://github.com/FaisalFehad/Guard.git
+cd Guard
+./build.sh
+open build/Guard.app</code>
+        </div>
+        <div class="install-steps">
+          Requires: <code>swiftc</code> (included with Xcode Command Line Tools).<br>
+          Run <code>xcode-select --install</code> if you don't have it.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer>
+    <div class="footer-brand">
+      <a href="#" class="nav-brand">
+        <img src="icon.png" alt="Guard">
+        <span>Guard</span>
+      </a>
+      <p>Camera access monitor for macOS. Open source, fully local, privacy-first.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#install">Download</a>
+      <a href="https://github.com/FaisalFehad/Guard/releases">Releases</a>
+    </div>
+    <div class="footer-col">
+      <h4>Open Source</h4>
+      <a href="https://github.com/FaisalFehad/Guard">GitHub</a>
+      <a href="https://github.com/FaisalFehad/Guard/issues">Issues</a>
+      <a href="https://github.com/FaisalFehad/Guard/blob/main/LICENSE">License</a>
+    </div>
+  </footer>
+
+  <!-- ═══ SCROLL ANIMATIONS ═══ -->
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.08 });
+
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+    function copyCode(btn) {
+      const code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code);
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    }
+  </script>
+
+</body>
+</html>
