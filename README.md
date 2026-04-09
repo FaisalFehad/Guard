@@ -69,6 +69,12 @@ Alert: "Allow or Block?"
 
 ## Install
 
+### Homebrew
+
+```bash
+brew install --cask guard
+```
+
 ### Download
 
 Grab the latest DMG from the [releases page](https://github.com/FaisalFehad/Guard/releases/download/v1.0.0/Guard.dmg).
